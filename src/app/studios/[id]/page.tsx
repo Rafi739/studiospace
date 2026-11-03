@@ -7,8 +7,9 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ArrowUpRight, CalendarDays, Check, Clock3, Heart, MapPin, ShieldCheck, Star, Users } from "lucide-react";
 import { toast } from "sonner";
 import { SiteLayout } from "@/components/site-shell";
-import { api } from "@/lib/api";
-import type { Studio } from "@/lib/types";
+import { api, ApiError } from "@/lib/api";
+import { authClient } from "@/lib/auth-client";
+import type { Review, Studio } from "@/lib/types";
 
 export default function StudioDetailsPage() {
   return <Suspense fallback={<SiteLayout darkNavbar><div className="page-loading"><span className="spinner" /> Finding your space...</div></SiteLayout>}><StudioDetails /></Suspense>;
@@ -17,8 +18,16 @@ export default function StudioDetailsPage() {
 function StudioDetails() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const { data: session, isPending: sessionPending } = authClient.useSession();
   const dateInput = useRef<HTMLInputElement>(null);
   const [studio, setStudio] = useState<Studio | null>(null);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [hasReviewed, setHasReviewed] = useState(false);
+  const [reviewsLoading, setReviewsLoading] = useState(true);
+  const [reviewsError, setReviewsError] = useState("");
+  const [rating, setRating] = useState(5);
+  const [comment, setComment] = useState("");
+  const [submittingReview, setSubmittingReview] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [date, setDate] = useState("");
@@ -34,6 +43,12 @@ function StudioDetails() {
     api.studio(params.id).then((result) => setStudio(result.studio))
       .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Studio not found."))
       .finally(() => setLoading(false));
+    api.studioReviews(params.id).then((result) => {
+      setReviews(result.reviews);
+      setHasReviewed(result.hasReviewed);
+    })
+      .catch((reason: unknown) => setReviewsError(reason instanceof Error ? reason.message : "Could not load reviews."))
+      .finally(() => setReviewsLoading(false));
   }, [params.id]);
 
   const hours = useMemo(() => {
@@ -58,6 +73,26 @@ function StudioDetails() {
     } finally { setBooking(false); }
   }
 
+  async function submitReview(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!studio) return;
+    setSubmittingReview(true);
+    try {
+      const result = await api.createReview(studio.id, { rating, comment });
+      setReviews((current) => [result.review, ...current]);
+      setHasReviewed(true);
+      setStudio((current) => current
+        ? { ...current, rating: result.rating, reviewCount: result.reviewCount }
+        : current);
+      setComment("");
+      setRating(5);
+      toast.success("Your review was submitted.");
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : "Could not submit your review.");
+      if (reason instanceof ApiError && reason.status === 401) router.push("/login");
+    } finally { setSubmittingReview(false); }
+  }
+
   if (loading) return <SiteLayout darkNavbar><div className="page-loading"><span className="spinner" /> Finding your space...</div></SiteLayout>;
   if (!studio || error) return <SiteLayout darkNavbar><div className="error-panel detail-error"><h2>We couldn’t find this studio.</h2><p>{error}</p><Link className="button button-dark" href="/studios"><ArrowLeft size={16} /> Explore studios</Link></div></SiteLayout>;
   const images = studio.images.length ? studio.images : [];
@@ -73,6 +108,37 @@ function StudioDetails() {
       <div className="detail-copy">
         <div className="overview-block"><h2>About this space</h2><p>{studio.description}</p></div>
         <div className="overview-block"><h2>What this space offers</h2>{studio.amenities.length ? <div className="amenity-list">{studio.amenities.map((amenity) => <span key={amenity}><Check size={16} />{amenity}</span>)}</div> : <p>Amenities will be shared by the host.</p>}</div>
+        <section className="overview-block reviews-block" aria-labelledby="reviews-title">
+          <h2 id="reviews-title">Reviews {studio.reviewCount ? `(${studio.reviewCount})` : ""}</h2>
+          {sessionPending
+            ? <p className="reviews-status">Checking your account...</p>
+            : session?.user.id === studio.hostId
+              ? <p>You can’t review your own studio.</p>
+            : hasReviewed
+              ? <p>You’ve already reviewed this studio.</p>
+            : session
+              ? <form className="review-form" onSubmit={submitReview}>
+                <label htmlFor="review-rating">Your rating</label>
+                <select id="review-rating" value={rating} onChange={(event) => setRating(Number(event.target.value))}>
+                  {[5, 4, 3, 2, 1].map((value) => <option key={value} value={value}>{value} {value === 1 ? "star" : "stars"}</option>)}
+                </select>
+                <label htmlFor="review-comment">Your review</label>
+                <textarea id="review-comment" value={comment} onChange={(event) => setComment(event.target.value)} minLength={3} maxLength={1000} required placeholder="Share what your experience was like." />
+                <button className="button button-lime" disabled={submittingReview}>{submittingReview ? "Submitting..." : "Submit review"}</button>
+              </form>
+              : <p><Link href="/login">Log in</Link> to leave a review.</p>}
+          {reviewsLoading
+            ? <p className="reviews-status">Loading reviews...</p>
+            : reviewsError
+              ? <p className="reviews-status">{reviewsError}</p>
+              : reviews.length
+                ? <div className="review-list">{reviews.map((review) => <article className="review-item" key={review.id}>
+                  <div className="review-item-heading"><strong>{review.userName}</strong><span><Star size={13} fill="currentColor" /> {review.rating}</span></div>
+                  <p>{review.comment}</p>
+                  <time dateTime={review.createdAt}>{new Date(review.createdAt).toLocaleDateString()}</time>
+                </article>)}</div>
+                : <p className="reviews-status">No reviews yet. Be the first to share your experience.</p>}
+        </section>
         <div className="overview-block"><h2>Your host</h2><div className="host-details"><span>{studio.hostName.slice(0, 1).toUpperCase()}</span><div><strong>{studio.hostName}</strong><p>StudioSpace community host</p></div></div></div>
         <div className="capacity-note"><ShieldCheck size={20} /><div><strong>A space you can count on</strong><p>Booking requests are handled securely through StudioSpace.</p></div></div>
       </div>

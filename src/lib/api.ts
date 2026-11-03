@@ -1,4 +1,4 @@
-import type { Booking, BookingStatus, DashboardSummary, Studio } from "@/lib/types";
+import type { Booking, BookingStatus, DashboardSummary, Review, Studio } from "@/lib/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
@@ -65,6 +65,13 @@ export const api = {
   },
   studio: (id: string) =>
     request<{ studio: Studio }>(`/api/studios/${encodeURIComponent(id)}`),
+  studioReviews: (id: string) =>
+    request<{ reviews: Review[]; hasReviewed: boolean }>(`/api/studios/${encodeURIComponent(id)}/reviews`),
+  createReview: (id: string, data: { rating: number; comment: string }) =>
+    request<{ review: Review; rating: number; reviewCount: number }>(
+      `/api/studios/${encodeURIComponent(id)}/reviews`,
+      { method: "POST", body: JSON.stringify(data) },
+    ),
   createStudio: (data: Omit<Studio, "id" | "hostId" | "hostName" | "createdAt">) =>
     request<{ studio: Studio }>("/api/studios", {
       method: "POST",
@@ -90,6 +97,7 @@ export const api = {
       body: JSON.stringify(data),
     }),
   myBookings: () => request<{ bookings: Booking[] }>("/api/bookings/my"),
+  hostBookings: () => request<{ bookings: Booking[] }>("/api/bookings/host"),
   booking: (id: string) =>
     request<{ booking: Booking }>(`/api/bookings/${encodeURIComponent(id)}`),
   cancelBooking: (id: string) =>

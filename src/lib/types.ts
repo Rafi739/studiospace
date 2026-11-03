@@ -23,6 +23,14 @@ export interface Studio {
   reviewCount?: number;
 }
 
+export interface Review {
+  id: string;
+  userName: string;
+  rating: number;
+  comment: string;
+  createdAt: string;
+}
+
 export type BookingStatus =
   | "pending"
   | "confirmed"
