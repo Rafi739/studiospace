@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   ArrowUpRight,
   Menu,
@@ -10,6 +12,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+import { authClient } from "@/lib/auth-client";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export function Brand({ light = false }: { light?: boolean }) {
   return (
@@ -21,7 +25,24 @@ export function Brand({ light = false }: { light?: boolean }) {
 }
 
 export function Navbar({ solid = false }: { solid?: boolean }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
+  const { data: session } = authClient.useSession();
+
+  async function logout() {
+    await authClient.signOut();
+    router.replace("/");
+    router.refresh();
+  }
+
+  const accountLinks = <>
+    <Link href="/dashboard">Dashboard</Link>
+    <Link href="/dashboard/add-studio">Add new studio</Link>
+    <Link href="/dashboard/my-studios">My studio listings</Link>
+    <Link href="/dashboard/bookings">My bookings</Link>
+    <button type="button" onClick={logout}>Log out</button>
+  </>;
+
   return (
     <header className={`navbar ${solid ? "navbar-solid" : ""}`}>
       <div className="nav-inner">
@@ -32,14 +53,28 @@ export function Navbar({ solid = false }: { solid?: boolean }) {
           <Link href="/#how-it-works">How it works</Link>
           <Link href="/#about">About us</Link>
           <div className="mobile-nav-actions">
-            <Link href="/login" className="button button-outline">Log in</Link>
-            <Link href="/register" className="button button-lime">Get started <ArrowUpRight size={15} /></Link>
+            {session ? accountLinks : <>
+              <Link href="/login" className="button button-outline">Log in</Link>
+              <Link href="/register" className="button button-lime">Get started <ArrowUpRight size={15} /></Link>
+            </>}
           </div>
         </nav>
         <div className="nav-actions">
-          <Link href="/login" className="nav-login">Log in</Link>
-          <Link href="/register" className="button button-lime">Get started <ArrowUpRight size={15} /></Link>
+          <ThemeToggle />
+          {session ? <details className="nav-account">
+            <summary aria-label="Open account menu">
+              {session.user.image
+                ? <Image src={session.user.image} alt="" width={36} height={36} unoptimized />
+                : <span>{(session.user.name || session.user.email).slice(0, 1).toUpperCase()}</span>}
+              <span className="nav-account-name">{session.user.name || session.user.email}</span>
+            </summary>
+            <div className="nav-account-menu">{accountLinks}</div>
+          </details> : <>
+            <Link href="/login" className="nav-login">Log in</Link>
+            <Link href="/register" className="button button-lime">Get started <ArrowUpRight size={15} /></Link>
+          </>}
         </div>
+        <div className="mobile-theme-toggle"><ThemeToggle /></div>
         <button className="menu-toggle" onClick={() => setOpen(!open)} aria-label={open ? "Close menu" : "Open menu"}>
           {open ? <X size={21} /> : <Menu size={21} />}
         </button>
@@ -70,7 +105,7 @@ export function Footer() {
           <Brand light />
           <p>Make room for your next big idea.<br />Find a space that feels like yours.</p>
         </div>
-        <div className="footer-col"><strong>Explore</strong><Link href="/studios">All studios</Link><Link href="/studios?category=Photo%20Studio">Photo studios</Link><Link href="/studios?category=Podcast%20Room">Podcast rooms</Link></div>
+        <div className="footer-col"><strong>Explore</strong><Link href="/studios">All studios</Link><Link href="/studios?category=Photo%20Studio">Photo studios</Link><Link href="/studios?category=Sound%20Stage">Sound stages</Link><Link href="/studios?category=Podcast%20Room">Podcast rooms</Link><Link href="/studios?category=Music%20Studio">Music studios</Link><Link href="/studios?category=Art%20Workshop">Art workshops</Link></div>
         <div className="footer-col"><strong>StudioSpace</strong><Link href="/#how-it-works">How it works</Link><Link href="/register">Become a host</Link><Link href="/login">Your account</Link></div>
         <div className="footer-col"><strong>Stay in the loop</strong><p>Fresh spaces and creative inspiration, occasionally.</p><form className="newsletter" onSubmit={subscribe}><input name="email" type="email" placeholder="Your email address" aria-label="Your email address" required /><button aria-label="Subscribe" disabled={subscribing}><ArrowUpRight size={17} /></button></form></div>
       </div>

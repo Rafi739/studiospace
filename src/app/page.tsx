@@ -33,7 +33,7 @@ export default function Home() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    api.studios({ sort: "rating" }).then((data) => setStudios(data.studios.slice(0, 3)))
+    api.studios({ sort: "rating", limit: 6 }).then((data) => setStudios(data.studios))
       .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Could not load studios."))
       .finally(() => setLoading(false));
   }, []);
@@ -77,6 +77,7 @@ export default function Home() {
             { n: "01", icon: WandSparkles, title: "Find your space", text: "Browse one-of-a-kind spaces made for the way you create." },
             { n: "02", icon: Check, title: "Book your time", text: "Pick a date, choose your hours and confirm in a few clicks." },
             { n: "03", icon: Sparkles, title: "Make it happen", text: "Show up, get inspired and create something worth sharing." },
+            { n: "04", icon: ArrowUpRight, title: "Share your work", text: "Bring your finished creation into the world." },
           ].map(({ n, icon: Icon, title, text }) => <article className="step-card" key={n}><div className="step-top"><span>{n}</span><Icon size={21} /></div><h3>{title}</h3><p>{text}</p></article>)}</div>
         </section>
 

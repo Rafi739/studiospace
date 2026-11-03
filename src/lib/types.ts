@@ -17,6 +17,7 @@ export interface Studio {
   capacity: number;
   amenities: string[];
   hostId: string;
+  hostName: string;
   createdAt: string;
   rating?: number;
   reviewCount?: number;

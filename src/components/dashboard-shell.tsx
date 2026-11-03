@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { ArrowLeft, CalendarDays, DoorOpen, LayoutDashboard, LogOut, Plus, Settings, Sparkles } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { Brand } from "@/components/site-shell";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const links = [
   { label: "Overview", href: "/dashboard", icon: LayoutDashboard },
@@ -41,6 +42,6 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       <button className="sidebar-logout" onClick={logout}><LogOut size={17} /> Log out</button>
       <div className="sidebar-help"><Sparkles size={17} /><strong>Keep making.</strong><p>Your next idea deserves a great space.</p><Link href="/studios">Explore studios →</Link></div>
     </aside>
-    <div className="dashboard-main"><header className="dashboard-topbar"><button className="dash-mobile-toggle" onClick={() => setMobile(!mobile)} aria-label="Toggle menu"><span /><span /></button><span>Creator workspace</span><Link href="/" className="dashboard-view-site">View site <ArrowLeft size={14} /></Link><div className="topbar-avatar">{userName.slice(0, 1).toUpperCase()}</div></header><main className="dashboard-content">{children}</main></div>
+    <div className="dashboard-main"><header className="dashboard-topbar"><button className="dash-mobile-toggle" onClick={() => setMobile(!mobile)} aria-label="Toggle menu"><span /><span /></button><span>Creator workspace</span><Link href="/" className="dashboard-view-site">View site <ArrowLeft size={14} /></Link><ThemeToggle /><div className="topbar-avatar">{userName.slice(0, 1).toUpperCase()}</div></header><main className="dashboard-content">{children}</main></div>
   </div>;
 }

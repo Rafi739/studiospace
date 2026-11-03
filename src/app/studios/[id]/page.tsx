@@ -25,6 +25,7 @@ function StudioDetails() {
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("11:00");
   const [booking, setBooking] = useState(false);
+  const [bookingOpen, setBookingOpen] = useState(false);
   const [activeImage, setActiveImage] = useState(0);
   const [saved, setSaved] = useState(false);
 
@@ -49,6 +50,7 @@ function StudioDetails() {
     try {
       await api.createBooking({ studioId: studio.id, bookingDate: date, startTime, endTime });
       toast.success("Booking request sent!");
+      setBookingOpen(false);
       router.push("/dashboard/bookings");
     } catch (reason) {
       toast.error(reason instanceof Error ? reason.message : "Could not book this studio.");
@@ -71,15 +73,17 @@ function StudioDetails() {
       <div className="detail-copy">
         <div className="overview-block"><h2>About this space</h2><p>{studio.description}</p></div>
         <div className="overview-block"><h2>What this space offers</h2>{studio.amenities.length ? <div className="amenity-list">{studio.amenities.map((amenity) => <span key={amenity}><Check size={16} />{amenity}</span>)}</div> : <p>Amenities will be shared by the host.</p>}</div>
+        <div className="overview-block"><h2>Your host</h2><div className="host-details"><span>{studio.hostName.slice(0, 1).toUpperCase()}</span><div><strong>{studio.hostName}</strong><p>StudioSpace community host</p></div></div></div>
         <div className="capacity-note"><ShieldCheck size={20} /><div><strong>A space you can count on</strong><p>Booking requests are handled securely through StudioSpace.</p></div></div>
       </div>
       <aside className="booking-card"><div className="booking-price"><strong>${studio.hourlyRate}</strong><span> / hour</span><div className="booking-rating"><Star size={14} fill="currentColor" />{studio.rating?.toFixed(1) ?? "New"}</div></div>
         <div className="booking-input"><label htmlFor="booking-date">Date</label><div><CalendarDays size={16} /><input ref={dateInput} id="booking-date" type="date" value={date} onChange={(event) => setDate(event.target.value)} required /></div></div>
         <div className="time-inputs"><div className="booking-input"><label htmlFor="start-time">Starts</label><div><Clock3 size={15} /><input id="start-time" type="time" value={startTime} onChange={(event) => setStartTime(event.target.value)} /></div></div><div className="booking-input"><label htmlFor="end-time">Ends</label><div><Clock3 size={15} /><input id="end-time" type="time" value={endTime} onChange={(event) => setEndTime(event.target.value)} /></div></div></div>
         <div className="booking-total"><span>{hours} hrs × ${studio.hourlyRate}</span><strong>${total.toFixed(2)}</strong></div><div className="booking-total booking-grand"><span>Total before taxes</span><strong>${total.toFixed(2)}</strong></div>
-        <button className="button button-lime button-full" disabled={booking || hours <= 0} onClick={submitBooking}>{booking ? "Sending request..." : "Request to book"} <ArrowUpRight size={16} /></button><small className="booking-footnote">You won’t be charged yet.</small>
+        <button className="button button-lime button-full" disabled={booking || hours <= 0} onClick={() => setBookingOpen(true)}>Book workspace now <ArrowUpRight size={16} /></button><small className="booking-footnote">You won’t be charged yet.</small>
         {studio.securityDeposit > 0 && <p className="deposit-note">Refundable security deposit: ${studio.securityDeposit}</p>}
       </aside>
     </div>
+    {bookingOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !booking) setBookingOpen(false); }}><div className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="booking-title"><button className="modal-close" onClick={() => setBookingOpen(false)} aria-label="Close" disabled={booking}>×</button><span className="modal-icon"><CalendarDays size={21} /></span><h2 id="booking-title">Confirm your booking request</h2><p>{studio.title} · {date} · {startTime}–{endTime}</p><div className="booking-total booking-grand"><span>{hours} hours × ${studio.hourlyRate}/hour</span><strong>${total.toFixed(2)}</strong></div><div className="modal-actions"><button className="button button-outline" onClick={() => setBookingOpen(false)} disabled={booking}>Go back</button><button className="button button-lime" onClick={submitBooking} disabled={booking}>{booking ? "Sending..." : "Send request"}</button></div></div></div>}
   </main></SiteLayout>;
 }

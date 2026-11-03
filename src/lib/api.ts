@@ -50,6 +50,7 @@ export interface StudioQuery {
   search?: string;
   category?: string;
   sort?: "rating" | "price-low" | "price-high";
+  limit?: number;
 }
 
 export const api = {
@@ -58,12 +59,13 @@ export const api = {
     if (query.search) params.set("search", query.search);
     if (query.category) params.set("category", query.category);
     if (query.sort) params.set("sort", query.sort);
+    if (query.limit) params.set("limit", String(query.limit));
     const suffix = params.size ? `?${params.toString()}` : "";
     return request<{ studios: Studio[] }>(`/api/studios${suffix}`);
   },
   studio: (id: string) =>
     request<{ studio: Studio }>(`/api/studios/${encodeURIComponent(id)}`),
-  createStudio: (data: Omit<Studio, "id" | "hostId" | "createdAt">) =>
+  createStudio: (data: Omit<Studio, "id" | "hostId" | "hostName" | "createdAt">) =>
     request<{ studio: Studio }>("/api/studios", {
       method: "POST",
       body: JSON.stringify(data),

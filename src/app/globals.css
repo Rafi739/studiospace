@@ -34,6 +34,7 @@ button { cursor: pointer; }
 .nav-links { display: flex; align-items: center; gap: 37px; margin-left: 78px; }
 .nav-links > a, .nav-login { font-size: 12px; font-weight: 500; color: rgba(255,255,255,.79); transition: color .2s; }
 .nav-links > a:hover, .nav-login:hover { color: var(--lime); }
+.nav-links > a[aria-current="page"] { color: var(--lime); }
 .nav-actions { display: flex; align-items: center; gap: 22px; }
 .button { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 44px; padding: 0 19px; border: 0; border-radius: 6px; font-size: 12px; font-weight: 700; transition: background .2s, color .2s, transform .2s, box-shadow .2s; }
 .button:hover { transform: translateY(-2px); }
@@ -149,3 +150,60 @@ h2 { letter-spacing: -1.6px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+.navbar { position: sticky; margin-bottom: -79px; }
+.nav-account { position: relative; }
+.nav-account summary { display: flex; align-items: center; gap: 9px; color: white; cursor: pointer; list-style: none; }
+.nav-account summary::-webkit-details-marker { display: none; }
+.nav-account summary > img, .nav-account summary > span:first-child { width: 36px; height: 36px; border-radius: 50%; }
+.nav-account summary > span:first-child { display: grid; place-items: center; background: var(--lime); color: #18200d; font-size: 13px; font-weight: 700; }
+.nav-account-name { max-width: 145px; overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.nav-account-menu { position: absolute; top: calc(100% + 13px); right: 0; display: grid; min-width: 190px; padding: 7px; border: 1px solid #e6e9e2; border-radius: 7px; background: white; box-shadow: 0 12px 35px #0e160f26; color: #283129; }
+.nav-account-menu a, .nav-account-menu button { padding: 10px; border: 0; border-radius: 4px; background: transparent; color: inherit; text-align: left; font-size: 11px; }
+.nav-account-menu a:hover, .nav-account-menu button:hover { background: #f0f4e9; }
+.theme-toggle { display: grid; width: 36px; height: 36px; flex: 0 0 auto; place-items: center; border: 1px solid currentColor; border-radius: 50%; background: transparent; color: inherit; }
+.mobile-theme-toggle { display: none; }
+.social-button { margin-top: 10px; }
+.host-details { display: flex; align-items: center; gap: 12px; }
+.host-details > span { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 50%; background: #e8f0da; color: #536d1e; font-size: 15px; font-weight: 750; }
+.host-details strong { font-size: 12px; }
+.host-details p { margin: 4px 0 0; color: #747c71; font-size: 10px; }
+@media (max-width: 800px) {
+  .navbar { margin-bottom: -68px; }
+  .mobile-nav-actions { flex-direction: column; }
+  .mobile-nav-actions > a, .mobile-nav-actions > button { padding: 12px 4px; border: 0; border-bottom: 1px solid #29322b; background: transparent; color: white; text-align: left; font-size: 12px; }
+  .mobile-theme-toggle { position: absolute; top: 15px; right: 61px; display: block; color: white; }
+}
+html[data-theme="dark"] { color-scheme: dark; --paper: #111713; --ink: #edf2eb; --muted: #a4aea2; --line: #303a31; }
+html[data-theme="dark"] body,
+html[data-theme="dark"] .listing-page,
+html[data-theme="dark"] .detail-page,
+html[data-theme="dark"] .dashboard-layout { background: #111713; color: #edf2eb; }
+html[data-theme="dark"] .dashboard-topbar,
+html[data-theme="dark"] .dash-panel,
+html[data-theme="dark"] .stat-card,
+html[data-theme="dark"] .manage-card,
+html[data-theme="dark"] .booking-row,
+html[data-theme="dark"] .booking-card,
+html[data-theme="dark"] .settings-card,
+html[data-theme="dark"] .studio-form,
+html[data-theme="dark"] .search-field,
+html[data-theme="dark"] .listing-filters select,
+html[data-theme="dark"] .nav-account-menu,
+html[data-theme="dark"] .confirm-modal { border-color: #303a31; background: #1a221c; color: #edf2eb; }
+html[data-theme="dark"] .dashboard-content,
+html[data-theme="dark"] .detail-meta,
+html[data-theme="dark"] .overview-block p,
+html[data-theme="dark"] .manage-card-body p,
+html[data-theme="dark"] .booking-row-details,
+html[data-theme="dark"] .settings-card p { color: #b0b9ad; }
+html[data-theme="dark"] .studio-form input,
+html[data-theme="dark"] .studio-form select,
+html[data-theme="dark"] .studio-form textarea,
+html[data-theme="dark"] .search-field input,
+html[data-theme="dark"] .listing-filters select,
+html[data-theme="dark"] .settings-form input { border-color: #3a463b; background: #141b16; color: #edf2eb; }
+html[data-theme="dark"] .dashboard-empty strong,
+html[data-theme="dark"] .panel-heading h2,
+html[data-theme="dark"] .overview-block h2,
+html[data-theme="dark"] .settings-card h2,
+html[data-theme="dark"] .manage-card-body h2 { color: #edf2eb; }
