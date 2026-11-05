@@ -13,6 +13,7 @@ import {
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
+import { getInitials } from "@/lib/profile";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 export function Brand({ light = false }: { light?: boolean }) {
@@ -27,20 +28,34 @@ export function Brand({ light = false }: { light?: boolean }) {
 export function Navbar({ solid = false }: { solid?: boolean }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const { data: session } = authClient.useSession();
 
   async function logout() {
-    await authClient.signOut();
-    router.replace("/");
-    router.refresh();
+    if (loggingOut) return;
+    setLoggingOut(true);
+    try {
+      const result = await authClient.signOut();
+      if (result.error) {
+        toast.error(result.error.message ?? "Could not log out.");
+        return;
+      }
+      router.replace("/");
+      router.refresh();
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : "Could not log out.");
+    } finally {
+      setLoggingOut(false);
+    }
   }
 
   const accountLinks = <>
-    <Link href="/dashboard">Dashboard</Link>
-    <Link href="/dashboard/add-studio">Add new studio</Link>
-    <Link href="/dashboard/my-studios">My studio listings</Link>
-    <Link href="/dashboard/bookings">My bookings</Link>
-    <button type="button" onClick={logout}>Log out</button>
+    <Link href="/dashboard" onClick={() => setOpen(false)}>Dashboard</Link>
+    <Link href="/dashboard/bookings" onClick={() => setOpen(false)}>My bookings</Link>
+    <Link href="/dashboard/my-studios" onClick={() => setOpen(false)}>My listings</Link>
+    <Link href="/dashboard/settings" onClick={() => setOpen(false)}>Profile Settings</Link>
+    <Link href="/dashboard/add-studio" onClick={() => setOpen(false)}>Add a studio</Link>
+    <button type="button" onClick={logout} disabled={loggingOut}>{loggingOut ? "Logging out..." : "Log out"}</button>
   </>;
 
   return (
@@ -48,14 +63,14 @@ export function Navbar({ solid = false }: { solid?: boolean }) {
       <div className="nav-inner">
         <Brand light />
         <nav className={`nav-links ${open ? "nav-open" : ""}`}>
-          <Link href="/">Home</Link>
-          <Link href="/studios">Explore studios</Link>
-          <Link href="/#how-it-works">How it works</Link>
-          <Link href="/#about">About us</Link>
+          <Link href="/" onClick={() => setOpen(false)}>Home</Link>
+          <Link href="/studios" onClick={() => setOpen(false)}>Explore studios</Link>
+          <Link href="/#how-it-works" onClick={() => setOpen(false)}>How it works</Link>
+          <Link href="/#about" onClick={() => setOpen(false)}>About us</Link>
           <div className="mobile-nav-actions">
             {session ? accountLinks : <>
-              <Link href="/login" className="button button-outline">Log in</Link>
-              <Link href="/register" className="button button-lime">Get started <ArrowUpRight size={15} /></Link>
+              <Link href="/login" className="button button-outline" onClick={() => setOpen(false)}>Log in</Link>
+              <Link href="/register" className="button button-lime" onClick={() => setOpen(false)}>Get started <ArrowUpRight size={15} /></Link>
             </>}
           </div>
         </nav>
@@ -65,7 +80,7 @@ export function Navbar({ solid = false }: { solid?: boolean }) {
             <summary aria-label="Open account menu">
               {session.user.image
                 ? <Image src={session.user.image} alt="" width={36} height={36} unoptimized />
-                : <span>{(session.user.name || session.user.email).slice(0, 1).toUpperCase()}</span>}
+                : <span>{getInitials(session.user.name || session.user.email)}</span>}
               <span className="nav-account-name">{session.user.name || session.user.email}</span>
             </summary>
             <div className="nav-account-menu">{accountLinks}</div>
