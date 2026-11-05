@@ -12,7 +12,7 @@ export function StudioCard({ studio }: { studio: Studio }) {
         <span className="card-arrow"><ArrowUpRight size={17} /></span>
       </Link>
       <div className="studio-card-info">
-        <div className="studio-card-title"><Link href={`/studios/${studio.id}`}>{studio.title}</Link><span className="rating"><Star size={13} fill="currentColor" /> {studio.rating?.toFixed(1) ?? "New"}{studio.reviewCount ? <small> ({studio.reviewCount})</small> : null}</span></div>
+        <div className="studio-card-title"><Link href={`/studios/${studio.id}`}>{studio.title}</Link><span className="rating"><Star size={13} fill="currentColor" /> {studio.rating && studio.rating > 0 ? studio.rating.toFixed(1) : "New"}{studio.reviewCount ? <small> ({studio.reviewCount})</small> : null}</span></div>
         <p className="studio-location"><MapPin size={13} />{studio.location}</p>
         <div className="studio-card-price"><strong>${studio.hourlyRate}<span> / hour</span></strong><span>Up to {studio.capacity} guests</span></div>
       </div>

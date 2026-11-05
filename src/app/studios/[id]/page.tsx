@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { ArrowLeft, ArrowUpRight, CalendarDays, Check, Clock3, Heart, MapPin, ShieldCheck, Star, Users } from "lucide-react";
 import { toast } from "sonner";
 import { SiteLayout } from "@/components/site-shell";
@@ -19,7 +19,6 @@ function StudioDetails() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const { data: session, isPending: sessionPending } = authClient.useSession();
-  const dateInput = useRef<HTMLInputElement>(null);
   const [studio, setStudio] = useState<Studio | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [hasReviewed, setHasReviewed] = useState(false);
@@ -31,36 +30,77 @@ function StudioDetails() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [date, setDate] = useState("");
-  const [startTime, setStartTime] = useState("09:00");
-  const [endTime, setEndTime] = useState("11:00");
+  const [duration, setDuration] = useState(2);
+  const [startTime, setStartTime] = useState("");
+  const [availabilityResult, setAvailabilityResult] = useState<{
+    key: string;
+    startTimes: string[];
+    error: string;
+  } | null>(null);
   const [booking, setBooking] = useState(false);
   const [bookingOpen, setBookingOpen] = useState(false);
-  const [activeImage, setActiveImage] = useState(0);
+  const [activeImage, setActiveImage] = useState("");
+  const [failedImages, setFailedImages] = useState<string[]>([]);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    if (dateInput.current) dateInput.current.min = new Date().toISOString().slice(0, 10);
-    api.studio(params.id).then((result) => setStudio(result.studio))
-      .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Studio not found."))
-      .finally(() => setLoading(false));
+    let active = true;
+    api.studio(params.id).then((result) => {
+      if (active) setStudio(result.studio);
+    })
+      .catch((reason: unknown) => {
+        if (active) setError(reason instanceof Error ? reason.message : "Studio not found.");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
     api.studioReviews(params.id).then((result) => {
+      if (!active) return;
       setReviews(result.reviews);
       setHasReviewed(result.hasReviewed);
     })
-      .catch((reason: unknown) => setReviewsError(reason instanceof Error ? reason.message : "Could not load reviews."))
-      .finally(() => setReviewsLoading(false));
+      .catch((reason: unknown) => {
+        if (active) setReviewsError(reason instanceof Error ? reason.message : "Could not load reviews.");
+      })
+      .finally(() => {
+        if (active) setReviewsLoading(false);
+      });
+    return () => { active = false; };
   }, [params.id]);
 
-  const hours = useMemo(() => {
-    const [startHour, startMinute] = startTime.split(":").map(Number);
-    const [endHour, endMinute] = endTime.split(":").map(Number);
-    const duration = (endHour * 60 + endMinute - startHour * 60 - startMinute) / 60;
-    return Math.max(0, duration);
-  }, [startTime, endTime]);
+  const studioId = studio?.id;
+  const availabilityKey = studioId && date ? `${studioId}:${date}:${duration}` : "";
+  const currentAvailability = availabilityResult?.key === availabilityKey ? availabilityResult : null;
+  const availableStarts = currentAvailability?.startTimes ?? [];
+  const availabilityError = currentAvailability?.error ?? "";
+  const availabilityLoading = Boolean(availabilityKey && !currentAvailability);
+
+  useEffect(() => {
+    if (!studioId || !date) return;
+    let active = true;
+    const key = `${studioId}:${date}:${duration}`;
+    api.studioAvailability(studioId, date, duration).then(({ startTimes }) => {
+      if (!active) return;
+      setAvailabilityResult({ key, startTimes, error: "" });
+      setStartTime((current) => startTimes.includes(current) ? current : startTimes[0] ?? "");
+    }).catch((reason: unknown) => {
+      if (!active) return;
+      setAvailabilityResult({
+        key,
+        startTimes: [],
+        error: reason instanceof Error ? reason.message : "Could not load available times.",
+      });
+      setStartTime("");
+    });
+    return () => { active = false; };
+  }, [studioId, date, duration]);
+
+  const hours = duration;
+  const endTime = startTime ? `${String(Number(startTime.slice(0, 2)) + duration).padStart(2, "0")}:00` : "";
   const total = studio ? hours * studio.hourlyRate : 0;
   async function submitBooking() {
     if (!studio) return;
-    if (!date || hours <= 0) { toast.error("Choose a date and a valid time range."); return; }
+    if (!date || !startTime || !availableStarts.includes(startTime)) { toast.error("Choose a date and an available time slot."); return; }
     setBooking(true);
     try {
       await api.createBooking({ studioId: studio.id, bookingDate: date, startTime, endTime });
@@ -95,14 +135,17 @@ function StudioDetails() {
 
   if (loading) return <SiteLayout darkNavbar><div className="page-loading"><span className="spinner" /> Finding your space...</div></SiteLayout>;
   if (!studio || error) return <SiteLayout darkNavbar><div className="error-panel detail-error"><h2>We couldn’t find this studio.</h2><p>{error}</p><Link className="button button-dark" href="/studios"><ArrowLeft size={16} /> Explore studios</Link></div></SiteLayout>;
-  const images = studio.images.length ? studio.images : [];
+  const images = [...new Set(studio.images)].filter((image) => image && !failedImages.includes(image));
+  const selectedImage = images.includes(activeImage) ? activeImage : images[0] ?? "";
+  const isOwnStudio = session?.user.id === studio.hostId;
+  const minimumDate = new Date().toISOString().slice(0, 10);
 
   return <SiteLayout darkNavbar><main className="detail-page">
     <Link href="/studios" className="back-link"><ArrowLeft size={16} /> All studios</Link>
-    <div className="detail-heading"><div><p className="section-kicker">{studio.category}</p><h1>{studio.title}</h1><div className="detail-meta"><span><Star size={15} fill="currentColor" /> {studio.rating?.toFixed(1) ?? "New"} {studio.reviewCount ? `(${studio.reviewCount} reviews)` : ""}</span><span><MapPin size={15} />{studio.location}</span><span><Users size={15} />Up to {studio.capacity} guests</span></div></div><button className={`save-button ${saved ? "saved" : ""}`} onClick={() => setSaved(!saved)} aria-label={saved ? "Remove from saved" : "Save studio"}><Heart size={18} fill={saved ? "currentColor" : "none"} /></button></div>
-    <div className="gallery">
-      <div className="gallery-main">{images[activeImage] ? <Image src={images[activeImage]} alt={`${studio.title} view ${activeImage + 1}`} fill sizes="(max-width: 700px) 100vw, 70vw" unoptimized /> : <div className="image-placeholder">StudioSpace</div>}</div>
-      <div className="gallery-thumbs">{images.slice(0, 4).map((image, index) => <button className={index === activeImage ? "thumb active" : "thumb"} key={image} onClick={() => setActiveImage(index)}><Image src={image} alt={`${studio.title} thumbnail ${index + 1}`} fill sizes="(max-width: 700px) 25vw, 18vw" unoptimized /></button>)}</div>
+    <div className="detail-heading"><div><p className="section-kicker">{studio.category}</p><h1>{studio.title}</h1><div className="detail-meta"><span><Star size={15} fill="currentColor" /> {studio.rating && studio.rating > 0 ? studio.rating.toFixed(1) : "New"} {studio.reviewCount ? `(${studio.reviewCount} reviews)` : ""}</span><span><MapPin size={15} />{studio.location}</span><span><Users size={15} />Up to {studio.capacity} guests</span></div></div><div className="detail-heading-actions"><div className="detail-heading-price"><strong>${studio.hourlyRate}</strong><span> / hour</span></div><button type="button" className="button button-lime detail-book-button" onClick={() => document.getElementById("booking-section")?.scrollIntoView({ behavior: "smooth", block: "center" })}>Book Now <ArrowUpRight size={16} /></button><button className={`save-button ${saved ? "saved" : ""}`} onClick={() => setSaved(!saved)} aria-label={saved ? "Remove from saved" : "Save studio"}><Heart size={18} fill={saved ? "currentColor" : "none"} /></button></div></div>
+    <div className="gallery" aria-label="Studio photos">
+      <div className="gallery-main">{selectedImage ? <Image src={selectedImage} alt={`${studio.title} main view`} fill sizes="(max-width: 800px) 100vw, 68vw" priority unoptimized onError={() => setFailedImages((current) => [...current, selectedImage])} /> : <div className="image-placeholder">StudioSpace</div>}</div>
+      <div className="gallery-thumbs" aria-label="More studio photos">{images.filter((image) => image !== selectedImage).map((image, index) => <button type="button" className="thumb" key={image} onClick={() => setActiveImage(image)} aria-label={`View studio photo ${index + 2}`}><Image src={image} alt="" fill sizes="(max-width: 800px) 25vw, 16vw" unoptimized onError={() => setFailedImages((current) => [...current, image])} /></button>)}</div>
     </div>
     <div className="detail-columns">
       <div className="detail-copy">
@@ -142,14 +185,19 @@ function StudioDetails() {
         <div className="overview-block"><h2>Your host</h2><div className="host-details"><span>{studio.hostName.slice(0, 1).toUpperCase()}</span><div><strong>{studio.hostName}</strong><p>StudioSpace community host</p></div></div></div>
         <div className="capacity-note"><ShieldCheck size={20} /><div><strong>A space you can count on</strong><p>Booking requests are handled securely through StudioSpace.</p></div></div>
       </div>
-      <aside className="booking-card"><div className="booking-price"><strong>${studio.hourlyRate}</strong><span> / hour</span><div className="booking-rating"><Star size={14} fill="currentColor" />{studio.rating?.toFixed(1) ?? "New"}</div></div>
-        <div className="booking-input"><label htmlFor="booking-date">Date</label><div><CalendarDays size={16} /><input ref={dateInput} id="booking-date" type="date" value={date} onChange={(event) => setDate(event.target.value)} required /></div></div>
-        <div className="time-inputs"><div className="booking-input"><label htmlFor="start-time">Starts</label><div><Clock3 size={15} /><input id="start-time" type="time" value={startTime} onChange={(event) => setStartTime(event.target.value)} /></div></div><div className="booking-input"><label htmlFor="end-time">Ends</label><div><Clock3 size={15} /><input id="end-time" type="time" value={endTime} onChange={(event) => setEndTime(event.target.value)} /></div></div></div>
-        <div className="booking-total"><span>{hours} hrs × ${studio.hourlyRate}</span><strong>${total.toFixed(2)}</strong></div><div className="booking-total booking-grand"><span>Total before taxes</span><strong>${total.toFixed(2)}</strong></div>
-        <button className="button button-lime button-full" disabled={booking || hours <= 0} onClick={() => setBookingOpen(true)}>Book workspace now <ArrowUpRight size={16} /></button><small className="booking-footnote">You won’t be charged yet.</small>
+      <aside className="booking-card" id="booking-section" aria-labelledby="booking-card-title"><h2 id="booking-card-title" className="booking-card-title">Reserve this space</h2><div className="booking-price"><strong>${studio.hourlyRate}</strong><span> / hour</span><div className="booking-rating"><Star size={14} fill="currentColor" />{studio.rating && studio.rating > 0 ? studio.rating.toFixed(1) : "New"}</div></div>
+        {isOwnStudio
+          ? <div className="own-studio-notice" role="status">This is your studio listing. You can’t book your own space.</div>
+          : <><div className="booking-input"><label htmlFor="booking-date">Date</label><div><CalendarDays size={16} /><input id="booking-date" type="date" min={minimumDate} value={date} onChange={(event) => { setDate(event.target.value); setStartTime(""); }} required /></div></div>
+            <div className="booking-input"><label htmlFor="booking-duration">Duration</label><div><Clock3 size={15} /><select id="booking-duration" value={duration} onChange={(event) => { setDuration(Number(event.target.value)); setStartTime(""); }}>{Array.from({ length: 12 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value} {value === 1 ? "hour" : "hours"}</option>)}</select></div></div>
+            <div className="booking-input"><label htmlFor="start-time">Available start time</label><div><Clock3 size={15} /><select id="start-time" value={startTime} disabled={!date || availabilityLoading || !availableStarts.length} onChange={(event) => setStartTime(event.target.value)}><option value="">{availabilityLoading ? "Checking availability..." : date ? "Select a time" : "Choose a date first"}</option>{availableStarts.map((time) => <option key={time} value={time}>{time} – {`${String(Number(time.slice(0, 2)) + duration).padStart(2, "0")}:00`}</option>)}</select></div></div>
+            {availabilityError && <p className="availability-error" role="alert">{availabilityError}</p>}
+            {date && !availabilityLoading && !availabilityError && availableStarts.length === 0 && <p className="availability-empty" role="status">No time slots are available for this date and duration. Try another date or duration.</p>}
+            <div className="booking-total"><span>{hours} {hours === 1 ? "hour" : "hours"} × ${studio.hourlyRate}</span><strong>${total.toFixed(2)}</strong></div><div className="booking-total booking-grand"><span>Total before taxes</span><strong>${total.toFixed(2)}</strong></div>
+            <button className="button button-lime button-full" disabled={booking || sessionPending || availabilityLoading || !date || !startTime || !availableStarts.includes(startTime)} onClick={() => session ? setBookingOpen(true) : router.push("/login")}>{session ? "Book Now" : "Log in to book"} <ArrowUpRight size={16} /></button><small className="booking-footnote">You won’t be charged yet.</small></>}
         {studio.securityDeposit > 0 && <p className="deposit-note">Refundable security deposit: ${studio.securityDeposit}</p>}
       </aside>
     </div>
-    {bookingOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !booking) setBookingOpen(false); }}><div className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="booking-title"><button className="modal-close" onClick={() => setBookingOpen(false)} aria-label="Close" disabled={booking}>×</button><span className="modal-icon"><CalendarDays size={21} /></span><h2 id="booking-title">Confirm your booking request</h2><p>{studio.title} · {date} · {startTime}–{endTime}</p><div className="booking-total booking-grand"><span>{hours} hours × ${studio.hourlyRate}/hour</span><strong>${total.toFixed(2)}</strong></div><div className="modal-actions"><button className="button button-outline" onClick={() => setBookingOpen(false)} disabled={booking}>Go back</button><button className="button button-lime" onClick={submitBooking} disabled={booking}>{booking ? "Sending..." : "Send request"}</button></div></div></div>}
+    {bookingOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !booking) setBookingOpen(false); }}><div className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="booking-title"><button className="modal-close" onClick={() => setBookingOpen(false)} aria-label="Close" disabled={booking}>×</button><span className="modal-icon"><CalendarDays size={21} /></span><h2 id="booking-title">Confirm your booking request</h2><p>{studio.title} · {date} · {startTime}–{endTime}</p><div className="booking-total booking-grand"><span>{hours} {hours === 1 ? "hour" : "hours"} × ${studio.hourlyRate}/hour</span><strong>${total.toFixed(2)}</strong></div><div className="modal-actions"><button className="button button-outline" onClick={() => setBookingOpen(false)} disabled={booking}>Go back</button><button className="button button-lime" onClick={submitBooking} disabled={booking}>{booking ? "Sending..." : "Send request"}</button></div></div></div>}
   </main></SiteLayout>;
 }
