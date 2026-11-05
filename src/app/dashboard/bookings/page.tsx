@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { CalendarDays, CalendarPlus, Clock3, Eye, MapPin, X } from "lucide-react";
@@ -8,9 +8,10 @@ import { toast } from "sonner";
 import { api } from "@/lib/api";
 import type { Booking, BookingStatus } from "@/lib/types";
 
-const tabs = ["all", "upcoming", "completed", "cancelled"] as const;
+const tabs = ["all", "upcoming", "completed", "cancelled", "rejected"] as const;
 type BookingView = "my" | "host";
 type BookingFilter = (typeof tabs)[number];
+type ConfirmationAction = "reject" | "cancel-customer" | "cancel-host";
 
 export default function BookingsPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -20,6 +21,15 @@ export default function BookingsPage() {
   const [error, setError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
+  const [confirmation, setConfirmation] = useState<{
+    booking: Booking;
+    action: ConfirmationAction;
+  } | null>(null);
+  const [pendingAction, setPendingAction] = useState<{
+    bookingId: string;
+    status: Exclude<BookingStatus, "pending">;
+  } | null>(null);
+  const actionInProgress = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -44,26 +54,38 @@ export default function BookingsPage() {
       ? bookings.filter((booking) => booking.status === "pending" || booking.status === "confirmed")
       : bookings.filter((booking) => booking.status === filter), [bookings, filter]);
 
-  async function cancel(booking: Booking) {
+  async function applyAction(
+    booking: Booking,
+    status: Exclude<BookingStatus, "pending">,
+    customerCancellation = false,
+  ) {
+    if (actionInProgress.current) return;
+    actionInProgress.current = true;
+    setPendingAction({ bookingId: booking.id, status });
     try {
-      const result = view === "my"
+      const result = customerCancellation
         ? await api.cancelBooking(booking.id)
-        : await api.setBookingStatus(booking.id, "cancelled");
+        : await api.setBookingStatus(booking.id, status);
       setBookings((current) => current.map((item) => item.id === booking.id ? result.booking : item));
-      toast.success("Booking cancelled.");
+      setSelectedBooking((current) => current?.id === booking.id ? result.booking : current);
+      setConfirmation(null);
+      toast.success(status === "confirmed" ? "Booking confirmed."
+        : status === "rejected" ? "Booking rejected."
+          : status === "completed" ? "Booking completed."
+            : "Booking cancelled.");
     } catch (reason) {
-      toast.error(reason instanceof Error ? reason.message : "Could not cancel booking.");
+      toast.error(reason instanceof Error ? reason.message : "Could not update booking.");
+    } finally {
+      actionInProgress.current = false;
+      setPendingAction(null);
     }
   }
 
-  async function updateStatus(booking: Booking, status: BookingStatus) {
-    try {
-      const result = await api.setBookingStatus(booking.id, status);
-      setBookings((current) => current.map((item) => item.id === booking.id ? result.booking : item));
-      toast.success(`Booking ${status}.`);
-    } catch (reason) {
-      toast.error(reason instanceof Error ? reason.message : "Could not update booking.");
-    }
+  function confirmAction() {
+    if (!confirmation || actionInProgress.current) return;
+    const { booking, action } = confirmation;
+    const status = action === "reject" ? "rejected" : "cancelled";
+    void applyAction(booking, status, action === "cancel-customer");
   }
 
   return <div className="dash-page">
@@ -88,14 +110,14 @@ export default function BookingsPage() {
               </div>
             </div>
             <button type="button" className="booking-details-button" onClick={() => setSelectedBooking(booking)}><Eye size={14} /> Details</button>
-            {view === "my" && ["pending", "confirmed"].includes(booking.status) && <button className="cancel-booking" onClick={() => cancel(booking)}><X size={14} /> Cancel</button>}
+            {view === "my" && ["pending", "confirmed"].includes(booking.status) && <button className="cancel-booking" disabled={pendingAction !== null} onClick={() => setConfirmation({ booking, action: "cancel-customer" })}>{pendingAction?.bookingId === booking.id && pendingAction.status === "cancelled" ? "Cancelling…" : <><X size={14} /> Cancel</>}</button>}
             {view === "host" && booking.status === "pending" && <>
-              <button className="host-action" onClick={() => updateStatus(booking, "confirmed")}>Confirm</button>
-              <button className="cancel-booking" onClick={() => cancel(booking)}><X size={14} /> Cancel</button>
+              <button className="host-action" disabled={pendingAction !== null} onClick={() => void applyAction(booking, "confirmed")}>{pendingAction?.bookingId === booking.id && pendingAction.status === "confirmed" ? "Confirming…" : "Confirm"}</button>
+              <button className="cancel-booking" disabled={pendingAction !== null} onClick={() => setConfirmation({ booking, action: "reject" })}>{pendingAction?.bookingId === booking.id && pendingAction.status === "rejected" ? "Rejecting…" : "Reject"}</button>
             </>}
             {view === "host" && booking.status === "confirmed" && <>
-              <button className="host-action" onClick={() => updateStatus(booking, "completed")}>Complete</button>
-              <button className="cancel-booking" onClick={() => cancel(booking)}><X size={14} /> Cancel</button>
+              <button className="host-action" disabled={pendingAction !== null} onClick={() => void applyAction(booking, "completed")}>{pendingAction?.bookingId === booking.id && pendingAction.status === "completed" ? "Completing…" : "Complete"}</button>
+              <button className="cancel-booking" disabled={pendingAction !== null} onClick={() => setConfirmation({ booking, action: "cancel-host" })}>{pendingAction?.bookingId === booking.id && pendingAction.status === "cancelled" ? "Cancelling…" : <><X size={14} /> Cancel</>}</button>
             </>}
           </article>)}</div>
           : <div className="dashboard-empty">
@@ -107,5 +129,6 @@ export default function BookingsPage() {
             {view === "my" && <Link className="button button-lime button-large booking-empty-action" href="/studios"><CalendarPlus size={17} />Explore Studios</Link>}
           </div>}
     {selectedBooking && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedBooking(null); }}><div className="confirm-modal booking-detail-modal" role="dialog" aria-modal="true" aria-labelledby="booking-detail-title"><button className="modal-close" onClick={() => setSelectedBooking(null)} aria-label="Close booking details"><X size={18} /></button><span className="modal-icon"><CalendarDays size={21} /></span><p className="section-kicker">Booking details</p><h2 id="booking-detail-title">{selectedBooking.studioTitle}</h2><dl className="booking-detail-list"><div><dt>Date</dt><dd>{new Date(`${selectedBooking.bookingDate}T00:00:00`).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })}</dd></div><div><dt>Time</dt><dd>{selectedBooking.startTime} – {selectedBooking.endTime}</dd></div><div><dt>Duration</dt><dd>{(Number(selectedBooking.endTime.slice(0, 2)) * 60 + Number(selectedBooking.endTime.slice(3)) - Number(selectedBooking.startTime.slice(0, 2)) * 60 - Number(selectedBooking.startTime.slice(3))) / 60} hours</dd></div><div><dt>Total price</dt><dd>${selectedBooking.totalPrice.toFixed(2)}</dd></div><div><dt>Status</dt><dd><span className={`status-pill status-${selectedBooking.status}`}>{selectedBooking.status}</span></dd></div></dl><div className="modal-actions"><Link href={`/studios/${selectedBooking.studioId}`} className="button button-outline">View studio</Link><button className="button button-lime" onClick={() => setSelectedBooking(null)}>Done</button></div></div></div>}
+    {confirmation && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && pendingAction === null) setConfirmation(null); }}><div className="confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="booking-action-title" aria-describedby="booking-action-description" aria-busy={pendingAction !== null}><span className="modal-icon"><CalendarDays size={21} /></span><p className="section-kicker">Confirm action</p><h2 id="booking-action-title">{confirmation.action === "reject" ? "Reject this booking?" : "Cancel this booking?"}</h2><p id="booking-action-description">{confirmation.action === "reject" ? "The booking will be marked as rejected and this time slot will become available again." : "The booking will be cancelled and this time slot will become available again."}</p><div className="modal-actions"><button className="button button-outline" disabled={pendingAction !== null} onClick={() => setConfirmation(null)}>Keep booking</button><button className="button button-danger" disabled={pendingAction !== null} onClick={confirmAction}>{pendingAction?.bookingId === confirmation.booking.id ? confirmation.action === "reject" ? "Rejecting…" : "Cancelling…" : confirmation.action === "reject" ? "Reject booking" : "Cancel booking"}</button></div></div></div>}
   </div>;
 }
