@@ -65,6 +65,12 @@ export const api = {
   },
   studio: (id: string) =>
     request<{ studio: Studio }>(`/api/studios/${encodeURIComponent(id)}`),
+  studioAvailability: (id: string, date: string, duration: number) => {
+    const params = new URLSearchParams({ date, duration: String(duration) });
+    return request<{ startTimes: string[] }>(
+      `/api/studios/${encodeURIComponent(id)}/availability?${params.toString()}`,
+    );
+  },
   studioReviews: (id: string) =>
     request<{ reviews: Review[]; hasReviewed: boolean }>(`/api/studios/${encodeURIComponent(id)}/reviews`),
   createReview: (id: string, data: { rating: number; comment: string }) =>
@@ -105,7 +111,7 @@ export const api = {
       `/api/bookings/${encodeURIComponent(id)}/cancel`,
       { method: "PATCH" },
     ),
-  setBookingStatus: (id: string, status: BookingStatus) =>
+  setBookingStatus: (id: string, status: Exclude<BookingStatus, "pending">) =>
     request<{ booking: Booking }>(
       `/api/bookings/${encodeURIComponent(id)}/status`,
       { method: "PATCH", body: JSON.stringify({ status }) },
@@ -117,14 +123,48 @@ export const api = {
       "/api/users/me",
       { method: "PATCH", body: JSON.stringify(data) },
     ),
-  uploadImage: async (file: File) => {
-    const formData = new FormData();
-    formData.append("image", file);
-    return request<{ url: string }>("/api/uploads/images", {
-      method: "POST",
-      body: formData,
-    });
-  },
+  uploadImage: (file: File, onProgress?: (progress: number) => void) =>
+    new Promise<{ url: string }>((resolve, reject) => {
+      const request = new XMLHttpRequest();
+      request.open("POST", `${API_URL}/api/uploads/images`);
+      request.withCredentials = true;
+      request.upload.onprogress = (event) => {
+        if (event.lengthComputable) onProgress?.(Math.round((event.loaded / event.total) * 100));
+      };
+      request.onerror = () => reject(new ApiError("Can’t reach StudioSpace right now. Please try again.", 0));
+      request.onload = () => {
+        let body: unknown;
+        try {
+          body = JSON.parse(request.responseText);
+        } catch {
+          body = {};
+        }
+        if (request.status < 200 || request.status >= 300) {
+          const message =
+            typeof body === "object" &&
+            body !== null &&
+            "error" in body &&
+            typeof body.error === "string"
+              ? body.error
+              : "Could not upload this image. Please try again.";
+          reject(new ApiError(message, request.status));
+          return;
+        }
+        if (
+          typeof body !== "object" ||
+          body === null ||
+          !("url" in body) ||
+          typeof body.url !== "string"
+        ) {
+          reject(new ApiError("The image server returned an invalid response.", request.status));
+          return;
+        }
+        resolve({ url: body.url });
+      };
+      const formData = new FormData();
+      formData.append("image", file);
+      request.send(formData);
+    }),
   subscribe: (email: string) =>
     request<{ success: true }>("/api/newsletter", {
       method: "POST",
